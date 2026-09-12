@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/AgyLogger.Cli/AgyLogger.Cli.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgyLogger.Cli.Tests/AgyLogger.Cli.Tests.csproj" />
+  </Folder>
 </Solution>

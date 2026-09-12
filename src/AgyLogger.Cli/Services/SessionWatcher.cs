@@ -50,7 +50,7 @@ public sealed class SessionWatcher : IDisposable
             Console.WriteLine("\nWatcher stopped.");
     }
 
-    private void OnTranscriptChanged(object sender, FileSystemEventArgs e)
+    private async void OnTranscriptChanged(object sender, FileSystemEventArgs e)
     {
         // Debounce: skip if we just processed this file
         lock (_lock)
@@ -64,8 +64,8 @@ public sealed class SessionWatcher : IDisposable
                 _processedFiles.Clear();
         }
 
-        // Small delay to let agy finish writing
-        Thread.Sleep(500);
+        // Small delay to let agy finish writing without blocking the FileSystemWatcher thread pool
+        await Task.Delay(500);
 
         try
         {

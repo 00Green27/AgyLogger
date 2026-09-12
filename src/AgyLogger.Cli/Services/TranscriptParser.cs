@@ -276,15 +276,26 @@ public static partial class TranscriptParser
         var dir = Path.GetDirectoryName(absolutePath) ?? absolutePath;
         while (!string.IsNullOrEmpty(dir))
         {
-            // Check if this looks like a project root (has .git, .csproj, etc.)
-            if (Directory.Exists(Path.Combine(dir, ".git")) ||
-                Directory.GetFiles(dir, "*.csproj").Length > 0 ||
-                Directory.GetFiles(dir, "*.slnx").Length > 0 ||
-                Directory.GetFiles(dir, "*.sln").Length > 0 ||
-                File.Exists(Path.Combine(dir, "package.json")))
+            try
             {
-                return dir;
+                if (Directory.Exists(dir))
+                {
+                    // Check if this looks like a project root (has .git, .csproj, etc.)
+                    if (Directory.Exists(Path.Combine(dir, ".git")) ||
+                        Directory.GetFiles(dir, "*.csproj").Length > 0 ||
+                        Directory.GetFiles(dir, "*.slnx").Length > 0 ||
+                        Directory.GetFiles(dir, "*.sln").Length > 0 ||
+                        File.Exists(Path.Combine(dir, "package.json")))
+                    {
+                        return dir;
+                    }
+                }
             }
+            catch (Exception)
+            {
+                // Ignore I/O errors (e.g., unauthorized access, deleted directories)
+            }
+
             var parent = Path.GetDirectoryName(dir);
             if (parent == dir) break; // reached root
             dir = parent;

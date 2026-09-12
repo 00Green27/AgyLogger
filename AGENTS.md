@@ -156,7 +156,7 @@ Do not expose raw JSON unless it is useful for understanding an event.
 Generated files are written to:
 
 ```text
-./logs/
+./.agylogs/
 ```
 
 Output filenames must be safe on the current operating system.

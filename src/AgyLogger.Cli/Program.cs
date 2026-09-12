@@ -6,7 +6,7 @@ using AgyLogger.Cli.Models;
 
 var outputOption = new Option<string?>(
     aliases: ["--output", "-o"],
-    description: "Output directory (default: logs/)");
+    description: "Output directory (default: .agylogs/)");
 
 var rootCommand = new RootCommand("AGY Request Logger — Antigravity CLI transcript viewer\n\nReads transcript_full.jsonl files from AGY's brain directory\nand renders them as readable Markdown documents.");
 

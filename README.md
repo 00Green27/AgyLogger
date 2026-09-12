@@ -45,7 +45,7 @@ Commands:
 AgyLogger list
 ```
 
-**Sync all sessions to Markdown (outputs to `logs/` by default):**
+**Sync all sessions to Markdown (outputs to `.agylogs/` by default):**
 ```bash
 AgyLogger sync
 ```

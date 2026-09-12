@@ -10,7 +10,7 @@ namespace AgyLogger.Cli.Services;
 /// </summary>
 public static class MarkdownRenderer
 {
-    private const string OutputSubDir = "logs";
+    private const string OutputSubDir = ".agylogs";
 
     /// <summary>
     /// Renders a session to a Markdown file in the output directory.

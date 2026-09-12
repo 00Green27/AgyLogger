@@ -17,7 +17,7 @@ public sealed class SessionWatcher : IDisposable
     {
         _quiet = quiet;
         _brainDir = brainDir ?? SessionDiscovery.GetDefaultBrainDir();
-        _outputDir = outputDir ?? Path.Combine(Directory.GetCurrentDirectory(), "logs");
+        _outputDir = outputDir ?? Path.Combine(Directory.GetCurrentDirectory(), ".agylogs");
 
         _watcher = new FileSystemWatcher(_brainDir)
         {

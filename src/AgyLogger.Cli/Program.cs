@@ -1,65 +1,41 @@
+using System.CommandLine;
 using System.Diagnostics;
 
 using AgyLogger.Cli.Services;
 using AgyLogger.Cli.Models;
 
-var command = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
-switch (command)
-{
-    case "list":
-        ListSessions();
-        break;
+var outputOption = new Option<string?>(
+    aliases: ["--output", "-o"],
+    description: "Output directory (default: logs/)");
 
-    case "sync":
-        var sessionId = args.Length > 1 ? args[1] : null;
-        var outputDir = GetArgValue(args, "--output") ?? GetArgValue(args, "-o");
-        SyncSessions(sessionId, outputDir);
-        break;
+var rootCommand = new RootCommand("AGY Request Logger — Antigravity CLI transcript viewer\n\nReads transcript_full.jsonl files from AGY's brain directory\nand renders them as readable Markdown documents.");
 
-    case "watch":
-        var watchOutput = GetArgValue(args, "--output") ?? GetArgValue(args, "-o");
-        WatchSessions(watchOutput);
-        break;
+var listCommand = new Command("list", "List all available sessions");
+listCommand.SetHandler(ListSessions);
 
-    case "run":
-        var outputDirRun = GetArgValue(args, "--output") ?? GetArgValue(args, "-o");
-        RunAgent(args, outputDirRun);
-        break;
+var syncCommand = new Command("sync", "Sync sessions to Markdown files");
+var sessionIdArgument = new Argument<string?>("session-id", () => null, "Session ID to sync");
+syncCommand.AddArgument(sessionIdArgument);
+syncCommand.AddOption(outputOption);
+syncCommand.SetHandler(SyncSessions, sessionIdArgument, outputOption);
 
-    case "help" or "--help" or "-h":
-    default:
-        ShowHelp();
-        break;
-}
+var watchCommand = new Command("watch", "Watch for new/updated sessions and auto-sync");
+watchCommand.AddOption(outputOption);
+watchCommand.SetHandler(WatchSessions, outputOption);
 
-static void ShowHelp()
-{
-    Console.WriteLine("""
-    AGY Request Logger — Antigravity CLI transcript viewer
+var runCommand = new Command("run", "Wrap AGY CLI execution and auto-sync in the background");
+var agyArgsArgument = new Argument<string[]>("args", () => [], "Arguments to pass to AGY");
+runCommand.AddArgument(agyArgsArgument);
+runCommand.AddOption(outputOption);
+runCommand.TreatUnmatchedTokensAsErrors = true;
+runCommand.SetHandler(RunAgent, agyArgsArgument, outputOption);
 
-    Reads transcript_full.jsonl files from AGY's brain directory
-    and renders them as readable Markdown documents.
+rootCommand.AddCommand(listCommand);
+rootCommand.AddCommand(syncCommand);
+rootCommand.AddCommand(watchCommand);
+rootCommand.AddCommand(runCommand);
 
-    Usage:
-      AgyRequestLogger <command> [options]
-
-    Commands:
-      list                    List all available sessions
-      sync [session-id]       Sync sessions to Markdown files
-      watch                   Watch for new/updated sessions and auto-sync
-      run [-- args]           Wrap AGY CLI execution and auto-sync in the background
-      help                    Show this help
-
-    Options:
-      -o, --output <dir>      Output directory (default: logs/)
-
-    Examples:
-      AgyRequestLogger list
-      AgyRequestLogger sync
-      AgyRequestLogger run
-      AgyRequestLogger run -- -p "my prompt"
-    """);
-}
+return await rootCommand.InvokeAsync(args);
 
 static void ListSessions()
 {
@@ -169,13 +145,7 @@ static void WatchSessions(string? outputDir)
     catch (AggregateException) { /* Ctrl+C */ }
 }
 
-static string? GetArgValue(string[] args, string flag)
-{
-    var idx = Array.IndexOf(args, flag);
-    return idx >= 0 && idx + 1 < args.Length ? args[idx + 1] : null;
-}
-
-static void RunAgent(string[] args, string? outputDir)
+static void RunAgent(string[] agyArgs, string? outputDir)
 {
     using var watcher = new SessionWatcher(outputDir: outputDir, quiet: true);
     watcher.Start();
@@ -185,29 +155,6 @@ static void RunAgent(string[] args, string? outputDir)
         FileName = "agy",
         UseShellExecute = false,
     };
-
-    // Pass everything after "run" (except -o / --output) to agy
-    var agyArgs = new List<string>();
-    bool skipNext = false;
-    for (int i = 1; i < args.Length; i++)
-    {
-        if (skipNext)
-        {
-            skipNext = false;
-            continue;
-        }
-        if (args[i] == "--")
-        {
-            agyArgs.AddRange(args.Skip(i + 1));
-            break;
-        }
-        if (args[i] == "-o" || args[i] == "--output")
-        {
-            skipNext = true;
-            continue;
-        }
-        agyArgs.Add(args[i]);
-    }
 
     foreach (var arg in agyArgs)
     {

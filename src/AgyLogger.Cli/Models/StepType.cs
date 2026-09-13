@@ -10,6 +10,7 @@ public static class StepType
     public const string ConversationHistory = "CONVERSATION_HISTORY";
     public const string SystemMessage = "SYSTEM_MESSAGE";
     public const string Checkpoint = "CHECKPOINT";
+    public const string ErrorMessage = "ERROR_MESSAGE";
     public const string RunCommand = "RUN_COMMAND";
     public const string ViewFile = "VIEW_FILE";
     public const string CodeAction = "CODE_ACTION";
@@ -28,7 +29,7 @@ public static class StepType
     public static readonly HashSet<string> StructuralTypes =
     [
         UserInput, PlannerResponse, ConversationHistory,
-        SystemMessage, Checkpoint
+        SystemMessage, Checkpoint, ErrorMessage, ErrorMessage
     ];
 
     /// <summary>
@@ -37,3 +38,5 @@ public static class StepType
     /// </summary>
     public static bool IsToolResult(string type) => !StructuralTypes.Contains(type);
 }
+
+

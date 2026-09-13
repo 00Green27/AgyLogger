@@ -1,21 +1,13 @@
 using System.Text;
 using System.Text.Json;
-
 using AgyLogger.Cli.Models;
 
 namespace AgyLogger.Cli.Services;
 
-/// <summary>
-/// Renders parsed AGY sessions as readable Markdown documents.
-/// </summary>
 public static class MarkdownRenderer
 {
     private const string OutputSubDir = ".agylogs";
 
-    /// <summary>
-    /// Renders a session to a Markdown file in the output directory.
-    /// Returns the path of the written file.
-    /// </summary>
     public static string RenderToFile(AgSession session, List<Exchange> exchanges, string? outputDir = null)
     {
         var dir = outputDir ?? Path.Combine(Directory.GetCurrentDirectory(), OutputSubDir);
@@ -30,118 +22,101 @@ public static class MarkdownRenderer
         return filePath;
     }
 
-    /// <summary>
-    /// Renders a session as a Markdown string.
-    /// </summary>
     public static string RenderMarkdown(AgSession session, List<Exchange> exchanges)
     {
         var sb = new StringBuilder();
 
-        // Header
-        sb.AppendLine($"# Antigravity CLI Session");
-        sb.AppendLine();
-        sb.AppendLine($"**Session ID:** `{session.ConversationId}`");
+        sb.AppendLine("<meta>");
+        sb.AppendLine($"- **session_id**: {session.ConversationId}");
         if (!string.IsNullOrEmpty(session.Model))
-            sb.AppendLine($"**Model:** {session.Model}");
+            sb.AppendLine($"- **model**: {session.Model}");
         if (!string.IsNullOrEmpty(session.Workspace))
-            sb.AppendLine($"**Workspace:** `{session.Workspace}`");
-        sb.AppendLine($"**Created:** {FormatTimestamp(session.CreatedAt)}");
-        sb.AppendLine($"**Updated:** {FormatTimestamp(session.UpdatedAt)}");
-        sb.AppendLine();
-        sb.AppendLine("---");
+            sb.AppendLine($"- **workspace**: `{session.Workspace}`");
+        sb.AppendLine($"- **created**: {FormatTimestamp(session.CreatedAt)}");
+        sb.AppendLine($"- **updated**: {FormatTimestamp(session.UpdatedAt)}");
+        sb.AppendLine("</meta>");
         sb.AppendLine();
 
-        // Exchanges
         for (var i = 0; i < exchanges.Count; i++)
         {
             var exchange = exchanges[i];
-            sb.AppendLine($"## Turn {i + 1}");
-            sb.AppendLine();
+            sb.AppendLine($"<exchange index=\"{i + 1}\">");
 
             foreach (var msg in exchange.Messages)
             {
-                switch (msg.Role)
+                if (msg.Role == "tool")
                 {
-                    case "user":
-                        RenderUserMessage(sb, msg);
-                        break;
-                    case "assistant":
-                        RenderAssistantMessage(sb, msg);
-                        break;
-                    case "tool":
-                        RenderToolMessage(sb, msg);
-                        break;
+                    RenderToolMessage(sb, msg);
+                }
+                else
+                {
+                    RenderMessage(sb, msg);
                 }
             }
 
-            sb.AppendLine("---");
+            sb.AppendLine("</exchange>");
             sb.AppendLine();
         }
 
         return sb.ToString();
     }
 
-    private static void RenderUserMessage(StringBuilder sb, ExchangeMessage msg)
+    private static void RenderMessage(StringBuilder sb, ExchangeMessage msg)
     {
-        sb.AppendLine("### 👤 User");
-        sb.AppendLine();
-        sb.AppendLine(msg.Text ?? "");
-        sb.AppendLine();
-    }
+        sb.AppendLine($"<message role=\"{msg.Role}\" timestamp=\"{FormatTimestamp(msg.Timestamp)}\">");
 
-    private static void RenderAssistantMessage(StringBuilder sb, ExchangeMessage msg)
-    {
-        // Thinking (collapsed)
         if (!string.IsNullOrEmpty(msg.Thinking))
         {
-            sb.AppendLine("<details>");
-            sb.AppendLine("<summary>🧠 Thinking</summary>");
-            sb.AppendLine();
-            sb.AppendLine(msg.Thinking);
-            sb.AppendLine();
-            sb.AppendLine("</details>");
+            sb.AppendLine("<thinking>");
+            sb.AppendLine(msg.Thinking.Trim());
+            sb.AppendLine("</thinking>");
             sb.AppendLine();
         }
 
-        // Response text
         if (!string.IsNullOrEmpty(msg.Text))
         {
-            sb.AppendLine("### 🤖 Assistant");
-            sb.AppendLine();
-            sb.AppendLine(msg.Text);
-            sb.AppendLine();
+            if (msg.Role == "assistant") sb.AppendLine("<assistant-text>");
+            sb.AppendLine(msg.Text.Trim());
+            if (msg.Role == "assistant") sb.AppendLine("</assistant-text>");
         }
+
+        sb.AppendLine("</message>");
+        sb.AppendLine();
     }
 
     private static void RenderToolMessage(StringBuilder sb, ExchangeMessage msg)
     {
         if (msg.Tool is null) return;
-
         var tool = msg.Tool;
-        var summary = tool.ToolSummary ?? tool.ToolAction ?? tool.Name;
-
-        sb.AppendLine("<details>");
-        sb.AppendLine($"<summary>🔧 Tool: {EscapeHtml(summary)} ({EscapeHtml(tool.Name)})</summary>");
-        sb.AppendLine();
-
-        // Render input
+        var status = msg.Status ?? "UNKNOWN";
+        
+        sb.AppendLine($"<tool-call name=\"{EscapeHtml(tool.Name)}\" status=\"{status}\" timestamp=\"{FormatTimestamp(msg.Timestamp)}\">");
+        
+        sb.AppendLine("<tool-input>");
         RenderToolInput(sb, tool);
+        sb.AppendLine("</tool-input>");
 
-        // Render output
-        if (!string.IsNullOrEmpty(tool.Output))
+        if (tool.Output is not null)
         {
-            sb.AppendLine("**Output:**");
-            sb.AppendLine();
+            sb.AppendLine("<tool-output>");
             var output = tool.Output.Trim();
-            if (output.Length > 2000)
-                output = output[..2000] + "\n... (truncated)";
-            sb.AppendLine("```");
-            sb.AppendLine(output);
-            sb.AppendLine("```");
-            sb.AppendLine();
+            if (output.Length > 8000)
+                output = output[..8000] + "\n... (truncated 8000 chars)";
+            
+            if (output.Contains('\n') || (output.StartsWith('{') && output.EndsWith('}')))
+            {
+                sb.AppendLine("```");
+                sb.AppendLine(output);
+                sb.AppendLine("```");
+            }
+            else
+            {
+                sb.AppendLine(output);
+            }
+            sb.AppendLine("</tool-output>");
         }
 
-        sb.AppendLine("</details>");
+        sb.AppendLine("</tool-call>");
         sb.AppendLine();
     }
 
@@ -150,7 +125,6 @@ public static class MarkdownRenderer
         if (tool.Input is null || tool.Input.Count == 0)
             return;
 
-        // Filter out meta args
         var relevantArgs = tool.Input
             .Where(kv => kv.Key is not ("toolAction" or "toolSummary"))
             .ToList();
@@ -158,39 +132,71 @@ public static class MarkdownRenderer
         if (relevantArgs.Count == 0)
             return;
 
-        // Specialized renderers for common tools
         switch (tool.Name)
         {
             case "run_command":
-                RenderCommandInput(sb, tool.Input);
+                var cmd = GetArg(tool.Input, "CommandLine");
+                var cwd = GetArg(tool.Input, "Cwd");
+                if (cwd is not null) sb.AppendLine($"- **cwd**: `{cwd}`");
+                sb.AppendLine("```bash");
+                sb.AppendLine(cmd ?? "");
+                sb.AppendLine("```");
                 return;
-            case "view_file":
-                RenderViewFileInput(sb, tool.Input);
-                return;
-            case "grep_search":
-                RenderGrepInput(sb, tool.Input);
-                return;
+                
             case "write_to_file":
-                RenderWriteFileInput(sb, tool.Input);
+                var path = GetArg(tool.Input, "TargetFile");
+                var code = GetArg(tool.Input, "CodeContent");
+                sb.AppendLine($"- **file**: `{path}`");
+                if (code is not null)
+                {
+                    sb.AppendLine("```");
+                    sb.AppendLine(code);
+                    sb.AppendLine("```");
+                }
                 return;
+
             case "replace_file_content":
-                RenderReplaceInput(sb, tool.Input);
+                var repPath = GetArg(tool.Input, "TargetFile");
+                var target = GetArg(tool.Input, "TargetContent");
+                var replacement = GetArg(tool.Input, "ReplacementContent");
+                sb.AppendLine($"- **file**: `{repPath}`");
+                if (target is not null || replacement is not null)
+                {
+                    sb.AppendLine("```diff");
+                    if (target is not null) {
+                        foreach(var line in target.Split('\n')) sb.AppendLine($"-{line.TrimEnd()}");
+                    }
+                    if (replacement is not null) {
+                        foreach(var line in replacement.Split('\n')) sb.AppendLine($"+{line.TrimEnd()}");
+                    }
+                    sb.AppendLine("```");
+                }
                 return;
-            case "list_dir":
-                RenderListDirInput(sb, tool.Input);
+                
+            case "manage_task":
+                var action = GetArg(tool.Input, "Action");
+                var taskId = GetArg(tool.Input, "TaskId");
+                var input = GetArg(tool.Input, "Input");
+                sb.AppendLine($"- **action**: {action}");
+                if (taskId is not null) sb.AppendLine($"- **task**: {taskId}");
+                if (input is not null) {
+                    sb.AppendLine("```");
+                    sb.AppendLine(input);
+                    sb.AppendLine("```");
+                }
                 return;
-            case "find_by_name":
-                RenderFindInput(sb, tool.Input);
-                return;
-            case "read_url_content":
-                RenderUrlInput(sb, tool.Input);
-                return;
-            case "search_web":
-                RenderSearchWebInput(sb, tool.Input);
+                
+            case "invoke_subagent":
+                var subagents = GetArg(tool.Input, "Subagents");
+                if (subagents is not null) {
+                    sb.AppendLine("```json");
+                    sb.AppendLine(subagents);
+                    sb.AppendLine("```");
+                }
                 return;
         }
 
-        // Generic fallback: show all args as key-value
+        // Generic fallback
         foreach (var (key, value) in relevantArgs)
         {
             var rendered = value switch
@@ -198,104 +204,19 @@ public static class MarkdownRenderer
                 JsonElement elem => FormatJsonElement(elem),
                 _ => value?.ToString() ?? ""
             };
-            sb.AppendLine($"- **{key}:** {rendered}");
+            if (rendered.Contains('\n')) {
+                sb.AppendLine($"- **{key}**:");
+                sb.AppendLine("```");
+                sb.AppendLine(rendered);
+                sb.AppendLine("```");
+            } else {
+                sb.AppendLine($"- **{key}**: {rendered}");
+            }
         }
-        sb.AppendLine();
-    }
-
-    private static void RenderCommandInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var cmd = GetArg(args, "CommandLine");
-        var cwd = GetArg(args, "Cwd");
-        if (cwd is not null)
-            sb.AppendLine($"**Directory:** `{cwd}`");
-        sb.AppendLine();
-        sb.AppendLine("```bash");
-        sb.AppendLine(cmd ?? "(unknown)");
-        sb.AppendLine("```");
-        sb.AppendLine();
-    }
-
-    private static void RenderViewFileInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var path = GetArg(args, "AbsolutePath");
-        var start = GetArg(args, "StartLine");
-        var end = GetArg(args, "EndLine");
-        sb.Append($"**File:** `{path}`");
-        if (start is not null || end is not null)
-            sb.Append($" (lines {start ?? "1"}–{end ?? "end"})");
-        sb.AppendLine();
-        sb.AppendLine();
-    }
-
-    private static void RenderGrepInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var query = GetArg(args, "Query");
-        var searchPath = GetArg(args, "SearchPath");
-        var includes = GetArg(args, "Includes");
-        sb.AppendLine($"**Query:** `{query}`");
-        sb.AppendLine($"**Path:** `{searchPath}`");
-        if (includes is not null)
-            sb.AppendLine($"**Includes:** {includes}");
-        sb.AppendLine();
-    }
-
-    private static void RenderWriteFileInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var path = GetArg(args, "TargetFile");
-        var desc = GetArg(args, "Description");
-        sb.AppendLine($"**File:** `{path}`");
-        if (desc is not null)
-            sb.AppendLine($"**Description:** {desc}");
-        sb.AppendLine();
-    }
-
-    private static void RenderReplaceInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var path = GetArg(args, "TargetFile");
-        var instruction = GetArg(args, "Instruction");
-        var desc = GetArg(args, "Description");
-        sb.AppendLine($"**File:** `{path}`");
-        if (instruction is not null)
-            sb.AppendLine($"**Instruction:** {instruction}");
-        if (desc is not null)
-            sb.AppendLine($"**Description:** {desc}");
-        sb.AppendLine();
-    }
-
-    private static void RenderListDirInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var path = GetArg(args, "DirectoryPath");
-        sb.AppendLine($"**Directory:** `{path}`");
-        sb.AppendLine();
-    }
-
-    private static void RenderFindInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var pattern = GetArg(args, "Pattern");
-        var dir = GetArg(args, "SearchDirectory");
-        sb.AppendLine($"**Pattern:** `{pattern}`");
-        sb.AppendLine($"**Directory:** `{dir}`");
-        sb.AppendLine();
-    }
-
-    private static void RenderUrlInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var url = GetArg(args, "Url");
-        sb.AppendLine($"**URL:** {url}");
-        sb.AppendLine();
-    }
-
-    private static void RenderSearchWebInput(StringBuilder sb, Dictionary<string, object> args)
-    {
-        var query = GetArg(args, "query");
-        sb.AppendLine($"**Query:** {query}");
-        sb.AppendLine();
     }
 
     private static string BuildFileName(AgSession session)
     {
-        // Format: YYYY-MM-DD_HHmmss_<short-id>.md
         if (DateTime.TryParse(session.CreatedAt, out var dt))
         {
             var shortId = session.ConversationId.Length >= 8
@@ -303,7 +224,6 @@ public static class MarkdownRenderer
                 : session.ConversationId;
             return $"{dt:yyyy-MM-dd}_{dt:HHmmss}_{shortId}.md";
         }
-
         return $"{session.ConversationId}.md";
     }
 
@@ -333,7 +253,7 @@ public static class MarkdownRenderer
         JsonValueKind.True => "true",
         JsonValueKind.False => "false",
         JsonValueKind.Number => elem.GetRawText(),
-        _ => $"`{elem.GetRawText()}`"
+        _ => elem.ToString() 
     };
 
     private static string EscapeHtml(string text) =>

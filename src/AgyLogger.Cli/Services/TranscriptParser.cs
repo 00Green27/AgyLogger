@@ -117,6 +117,7 @@ public static partial class TranscriptParser
                             Role = "user",
                             Timestamp = step.CreatedAt,
                             Text = userText,
+                            Status = step.Status,
                         });
                         current.StartTime = step.CreatedAt;
                         current.EndTime = step.CreatedAt;
@@ -136,6 +137,8 @@ public static partial class TranscriptParser
                             Role = "assistant",
                             Timestamp = step.CreatedAt,
                             Text = content,
+                            Status = step.Status,
+                            TruncatedFields = step.TruncatedFields,
                             Thinking = thinking,
                         });
                     }
@@ -159,6 +162,7 @@ public static partial class TranscriptParser
                                 Role = "tool",
                                 Timestamp = step.CreatedAt,
                                 Tool = toolInfo,
+                                Status = step.Status,
                             });
                             pendingTools[resultStepIdx] = toolInfo;
                             resultStepIdx++;
@@ -189,9 +193,39 @@ public static partial class TranscriptParser
                     }
                     break;
 
-                case { Type: StepType.ConversationHistory or StepType.SystemMessage or StepType.Checkpoint }:
-                    // Skip structural/scaffolding steps
+                case { Type: StepType.ConversationHistory }:
+                    // Skip history replays
                     continue;
+
+                case { Type: StepType.SystemMessage }:
+                    current ??= new Exchange();
+                    current.Messages.Add(new ExchangeMessage
+                    {
+                        Role = "system",
+                        Timestamp = step.CreatedAt,
+                        Text = step.Content,
+                    });
+                    break;
+
+                case { Type: StepType.Checkpoint }:
+                    current ??= new Exchange();
+                    current.Messages.Add(new ExchangeMessage
+                    {
+                        Role = "checkpoint",
+                        Timestamp = step.CreatedAt,
+                        Text = step.Content,
+                    });
+                    break;
+                    
+                case { Type: StepType.ErrorMessage }:
+                    current ??= new Exchange();
+                    current.Messages.Add(new ExchangeMessage
+                    {
+                        Role = "error",
+                        Timestamp = step.CreatedAt,
+                        Text = step.Content,
+                    });
+                    break;
 
                 case { Type: StepType.UserInput }:
                     // Non-explicit user input (replayed/synthesized) — skip
@@ -315,3 +349,4 @@ public static partial class TranscriptParser
         };
     }
 }
+

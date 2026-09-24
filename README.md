@@ -43,21 +43,31 @@ AgyLogger proxy
 
 ### 2. Trusting the Certificate Authority
 
-To intercept HTTPS traffic, Node.js (which powers `agy`) must trust the proxy's local CA. Node.js ignores OS certificate stores on Windows and macOS, so you must pass the certificate explicitly.
+To intercept HTTPS traffic, the client (Node.js, Go, or your OS) must trust the proxy's local CA.
 
-**Export the CA certificate:**
+**For Go clients (like `agy`) on Windows:**
+Go uses the standard Windows Certificate Store. You can automatically install the generated proxy CA into the CurrentUser trust store by running:
+```bash
+AgyLogger ca trust
+```
+(To remove it later, run `AgyLogger ca untrust`).
+
+**For Node.js clients:**
+Node.js ignores OS certificate stores on Windows and macOS. You must export the certificate explicitly and set `NODE_EXTRA_CA_CERTS`.
+
+*Export the CA certificate:*
 ```bash
 AgyLogger ca export --out ca.crt
 ```
 
-**Configure Node.js and Proxy Environment Variables (Bash/Zsh):**
+*Configure Node.js and Proxy Environment Variables (Bash/Zsh):*
 ```bash
 export HTTP_PROXY="http://127.0.0.1:8888"
 export HTTPS_PROXY="http://127.0.0.1:8888"
 export NODE_EXTRA_CA_CERTS="/absolute/path/to/ca.crt"
 ```
 
-**Configure for Windows Command Prompt:**
+*Configure for Windows Command Prompt:*
 ```cmd
 set "HTTP_PROXY=http://127.0.0.1:8888"
 set "HTTPS_PROXY=http://127.0.0.1:8888"

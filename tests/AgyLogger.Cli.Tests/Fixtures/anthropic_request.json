@@ -1,0 +1,22 @@
+{
+  "model": "claude-3-7-sonnet-20250219",
+  "system": "You are Claude Code.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "check repository status"
+    }
+  ],
+  "tools": [
+    {
+      "name": "git_status",
+      "description": "Run git status",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0
+}

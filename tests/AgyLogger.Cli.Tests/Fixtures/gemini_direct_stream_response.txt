@@ -1,0 +1,8 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Analyzing current workspace directory...","thought":true}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Here are the files "}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"in your directory."}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"STOP"}],"usageMetadata":{"totalTokenCount":42}}
+

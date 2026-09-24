@@ -1,0 +1,45 @@
+{
+  "model": "gemini-2.5-pro",
+  "project": "agy-test-project",
+  "request": {
+    "systemInstruction": {
+      "role": "user",
+      "parts": [
+        {
+          "text": "You are the Antigravity CLI assistant running in Code Assist mode."
+        }
+      ]
+    },
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "refactor the test harness"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "functionDeclarations": [
+          {
+            "name": "view_file",
+            "description": "View the contents of a file",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "AbsolutePath": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "temperature": 0.2
+    }
+  }
+}

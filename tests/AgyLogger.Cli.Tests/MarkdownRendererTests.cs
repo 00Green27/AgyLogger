@@ -1,6 +1,8 @@
 using System.Text.Json;
+
 using AgyLogger.Cli.Models;
 using AgyLogger.Cli.Services;
+
 using Xunit;
 
 namespace AgyLogger.Cli.Tests;
@@ -25,15 +27,15 @@ public class MarkdownRendererTests
         {
             new Exchange
             {
-                Messages = 
+                Messages =
                 {
                     new ExchangeMessage { Role = "user", Timestamp = "2023-10-01T12:00:00Z", Text = "do something" },
                     new ExchangeMessage { Role = "assistant", Timestamp = "2023-10-01T12:00:05Z", Text = "done", Thinking = "I should do it" },
-                    new ExchangeMessage 
-                    { 
-                        Role = "tool", 
-                        Timestamp = "2023-10-01T12:00:02Z", 
-                        Tool = new ToolInfo 
+                    new ExchangeMessage
+                    {
+                        Role = "tool",
+                        Timestamp = "2023-10-01T12:00:02Z",
+                        Tool = new ToolInfo
                         {
                             Name = "run_command",
                             ToolAction = "Running cmd",

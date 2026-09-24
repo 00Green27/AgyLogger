@@ -1,5 +1,7 @@
 using System.Text;
+
 using AgyLogger.Cli.Services;
+
 using Xunit;
 
 namespace AgyLogger.Cli.Tests;

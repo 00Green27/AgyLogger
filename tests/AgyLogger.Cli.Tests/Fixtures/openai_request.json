@@ -1,0 +1,26 @@
+{
+  "model": "gpt-4o",
+  "instructions": "You are a coding assistant.",
+  "tools": [
+    {
+      "type": "function",
+      "name": "shell",
+      "description": "Run shell command",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cmd": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": "hello"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+data: {"response":{"candidates":[{"content":{"role":"model","parts":[{"text":"Inspecting test harness structure...","thought":true}]}}]}}
+
+data: {"response":{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"view_file","args":{"AbsolutePath":"tests/Harness.cs"}}}]}}]}}
+
+data: {"response":{"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"STOP"}],"usageMetadata":{"totalTokenCount":88}}}
+

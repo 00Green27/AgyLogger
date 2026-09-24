@@ -1,0 +1,6 @@
+data: {"type":"response.output_text.delta","delta":"Hello! How can "}
+
+data: {"type":"response.output_text.delta","delta":"I help you today?"}
+
+data: {"type":"response.completed","response":{"status":"completed"}}
+

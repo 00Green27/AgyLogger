@@ -216,7 +216,7 @@ public static partial class TranscriptParser
                         Text = step.Content,
                     });
                     break;
-                    
+
                 case { Type: StepType.ErrorMessage }:
                     current ??= new Exchange();
                     current.Messages.Add(new ExchangeMessage
@@ -349,4 +349,3 @@ public static partial class TranscriptParser
         };
     }
 }
-

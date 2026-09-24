@@ -38,5 +38,3 @@ public static class StepType
     /// </summary>
     public static bool IsToolResult(string type) => !StructuralTypes.Contains(type);
 }
-
-

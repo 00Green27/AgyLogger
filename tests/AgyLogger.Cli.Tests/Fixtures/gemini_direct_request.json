@@ -1,0 +1,71 @@
+{
+  "systemInstruction": {
+    "role": "user",
+    "parts": [
+      {
+        "text": "You are the Antigravity CLI assistant."
+      }
+    ]
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "list my files"
+        }
+      ]
+    },
+    {
+      "role": "model",
+      "parts": [
+        {
+          "functionCall": {
+            "name": "list_directory",
+            "args": {
+              "path": "."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "functionResponse": {
+            "name": "list_directory",
+            "response": {
+              "output": "file1.txt\nfile2.txt"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "list_directory",
+          "description": "List files in a directory",
+          "parametersJsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["path"]
+          }
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0,
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  }
+}

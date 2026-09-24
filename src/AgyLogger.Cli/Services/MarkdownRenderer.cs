@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+
 using AgyLogger.Cli.Models;
 
 namespace AgyLogger.Cli.Services;
@@ -89,9 +90,9 @@ public static class MarkdownRenderer
         if (msg.Tool is null) return;
         var tool = msg.Tool;
         var status = msg.Status ?? "UNKNOWN";
-        
+
         sb.AppendLine($"<tool-call name=\"{EscapeHtml(tool.Name)}\" status=\"{status}\" timestamp=\"{FormatTimestamp(msg.Timestamp)}\">");
-        
+
         sb.AppendLine("<tool-input>");
         RenderToolInput(sb, tool);
         sb.AppendLine("</tool-input>");
@@ -102,7 +103,7 @@ public static class MarkdownRenderer
             var output = tool.Output.Trim();
             if (output.Length > 8000)
                 output = output[..8000] + "\n... (truncated 8000 chars)";
-            
+
             if (output.Contains('\n') || (output.StartsWith('{') && output.EndsWith('}')))
             {
                 sb.AppendLine("```");
@@ -142,7 +143,7 @@ public static class MarkdownRenderer
                 sb.AppendLine(cmd ?? "");
                 sb.AppendLine("```");
                 return;
-                
+
             case "write_to_file":
                 var path = GetArg(tool.Input, "TargetFile");
                 var code = GetArg(tool.Input, "CodeContent");
@@ -163,32 +164,36 @@ public static class MarkdownRenderer
                 if (target is not null || replacement is not null)
                 {
                     sb.AppendLine("```diff");
-                    if (target is not null) {
-                        foreach(var line in target.Split('\n')) sb.AppendLine($"-{line.TrimEnd()}");
+                    if (target is not null)
+                    {
+                        foreach (var line in target.Split('\n')) sb.AppendLine($"-{line.TrimEnd()}");
                     }
-                    if (replacement is not null) {
-                        foreach(var line in replacement.Split('\n')) sb.AppendLine($"+{line.TrimEnd()}");
+                    if (replacement is not null)
+                    {
+                        foreach (var line in replacement.Split('\n')) sb.AppendLine($"+{line.TrimEnd()}");
                     }
                     sb.AppendLine("```");
                 }
                 return;
-                
+
             case "manage_task":
                 var action = GetArg(tool.Input, "Action");
                 var taskId = GetArg(tool.Input, "TaskId");
                 var input = GetArg(tool.Input, "Input");
                 sb.AppendLine($"- **action**: {action}");
                 if (taskId is not null) sb.AppendLine($"- **task**: {taskId}");
-                if (input is not null) {
+                if (input is not null)
+                {
                     sb.AppendLine("```");
                     sb.AppendLine(input);
                     sb.AppendLine("```");
                 }
                 return;
-                
+
             case "invoke_subagent":
                 var subagents = GetArg(tool.Input, "Subagents");
-                if (subagents is not null) {
+                if (subagents is not null)
+                {
                     sb.AppendLine("```json");
                     sb.AppendLine(subagents);
                     sb.AppendLine("```");
@@ -204,12 +209,15 @@ public static class MarkdownRenderer
                 JsonElement elem => FormatJsonElement(elem),
                 _ => value?.ToString() ?? ""
             };
-            if (rendered.Contains('\n')) {
+            if (rendered.Contains('\n'))
+            {
                 sb.AppendLine($"- **{key}**:");
                 sb.AppendLine("```");
                 sb.AppendLine(rendered);
                 sb.AppendLine("```");
-            } else {
+            }
+            else
+            {
                 sb.AppendLine($"- **{key}**: {rendered}");
             }
         }
@@ -253,7 +261,7 @@ public static class MarkdownRenderer
         JsonValueKind.True => "true",
         JsonValueKind.False => "false",
         JsonValueKind.Number => elem.GetRawText(),
-        _ => elem.ToString() 
+        _ => elem.ToString()
     };
 
     private static string EscapeHtml(string text) =>

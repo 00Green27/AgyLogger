@@ -1,14 +1,10 @@
 # AgyLogger
 
-A lightweight, dependency-free (mostly) .NET CLI tool that reads Antigravity CLI (`agy`) transcript files (`transcript_full.jsonl`) and renders agent sessions as readable Markdown documents.
-
-## Motivation
-
-When working with the Antigravity CLI, agent sessions and actions are logged in JSONL format. `AgyLogger` provides an easy way to view these transcripts as nicely formatted Markdown files, making it simple to review agent behavior, tool calls, and model reasoning.
+A lightweight, dependency-free .NET CLI tool that reads Antigravity CLI (`agy`) transcript files and renders agent sessions as readable Markdown documents. It also functions as a full HTTP/HTTPS Reverse Proxy and Forward MitM Proxy to intercept LLM API traffic directly from the CLI.
 
 ## Installation
 
-You can run the project directly from the source code:
+Run the project directly from the source code:
 
 ```bash
 cd src/AgyLogger.Cli
@@ -27,53 +23,78 @@ dotnet build -c Release
 Usage:
   AgyLogger.Cli [command] [options]
 
-Options:
-  --version       Show version information
-  -?, -h, --help  Show help and usage information
-
 Commands:
-  list               List all available sessions
-  sync <session-id>  Sync sessions to Markdown files
-  watch              Watch for new/updated sessions and auto-sync
   run <args>         Wrap AGY CLI execution and auto-sync in the background
+  proxy              Start the MitM HTTP/HTTPS intercepting proxy
+  ca                 Manage the local Certificate Authority for MitM interception
+  sync               Sync transcripts to Markdown files
+  list               List all available sessions
+  watch              Watch for new/updated sessions and auto-sync
 ```
 
-### Examples
+### 1. HTTP/HTTPS Interception Engine
 
-**List all available AGY sessions:**
+AgyLogger can act as a local proxy to intercept traffic between `agy` and upstream LLM providers (e.g., Gemini, OpenAI, Anthropic). It supports both reverse proxying and forward MitM HTTPS proxying (via `CONNECT` tunnels) using a dynamically generated RSA 2048-bit Certificate Authority.
+
+**Start the proxy on the default port (8888):**
 ```bash
-AgyLogger list
+AgyLogger proxy
 ```
 
-**Sync all sessions to Markdown (outputs to `.agylogs/` by default):**
+### 2. Trusting the Certificate Authority
+
+To intercept HTTPS traffic, Node.js (which powers `agy`) must trust the proxy's local CA. Node.js ignores OS certificate stores on Windows and macOS, so you must pass the certificate explicitly.
+
+**Export the CA certificate:**
 ```bash
-AgyLogger sync
+AgyLogger ca export --out ca.crt
 ```
 
-**Sync a specific session:**
+**Configure Node.js and Proxy Environment Variables (Bash/Zsh):**
 ```bash
-AgyLogger sync <session-id>
+export HTTP_PROXY="http://127.0.0.1:8888"
+export HTTPS_PROXY="http://127.0.0.1:8888"
+export NODE_EXTRA_CA_CERTS="/absolute/path/to/ca.crt"
 ```
 
-**Run an AGY agent and automatically sync transcripts in the background:**
-```bash
-# Important: use '--' before passing arguments to the agy process
-AgyLogger run -o my_logs -- -p "my prompt"
+**Configure for Windows Command Prompt:**
+```cmd
+set "HTTP_PROXY=http://127.0.0.1:8888"
+set "HTTPS_PROXY=http://127.0.0.1:8888"
+set "NODE_EXTRA_CA_CERTS=C:\absolute\path\to\ca.crt"
 ```
 
-**Watch the AGY brain directory for changes and continuously sync transcripts:**
-```bash
-AgyLogger watch
+### 3. Log Output Format
+
+Logs are saved to `.agylogs/requests/` as Markdown files. The format uses structured XML tags to avoid collisions with Markdown content inside the model responses:
+
+- `<meta>`: Request metadata (timestamp, model, endpoint, upstream status).
+- `<headers>`: Redacted request and response headers.
+- `<request>`: The exact prompt/request payload.
+- `<response>`: The reconstructed model response, including text and tool calls.
+
+```markdown
+<meta>
+Timestamp: 2026-09-24T12:00:00Z
+Endpoint: api.gemini.com/v1/generateContent
+</meta>
+
+<headers>
+[REDACTED]
+</headers>
+
+<request>
+What is 2+2?
+</request>
+
+<response>
+4
+</response>
 ```
 
-## Architecture
+### 4. Legacy Transcript Reader Commands
 
-- **CLI (`System.CommandLine`)**: Handles commands and options.
-- **TranscriptDiscovery**: Finds AGY conversation logs in the user's `~/.gemini/antigravity-cli/brain/` folder.
-- **TranscriptReader**: Incrementally reads and parses the raw `JSONL` outputs, resilient to partial writes and incomplete records.
-- **MarkdownRenderer**: Deterministically transforms the JSON interactions into a clean Markdown timeline.
-- **TranscriptWatcher**: Uses `FileSystemWatcher` to monitor active transcripts and coordinates updates.
-
-## Development Rules
-
-Check out [`AGENTS.md`](./AGENTS.md) for detailed guidelines on the project's technical decisions, architecture, and coding standards.
+- `AgyLogger list`: List all logged `agy` sessions.
+- `AgyLogger sync`: Render transcripts to Markdown in `.agylogs/`.
+- `AgyLogger watch`: Monitor transcripts and re-render on changes.
+- `AgyLogger run -- agy <cmd>`: Wrap execution and sync logs automatically.

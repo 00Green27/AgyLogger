@@ -316,9 +316,9 @@ public static partial class TranscriptParser
                 {
                     // Check if this looks like a project root (has .git, .csproj, etc.)
                     if (Directory.Exists(Path.Combine(dir, ".git")) ||
-                        Directory.GetFiles(dir, "*.csproj").Length > 0 ||
-                        Directory.GetFiles(dir, "*.slnx").Length > 0 ||
-                        Directory.GetFiles(dir, "*.sln").Length > 0 ||
+                        Directory.EnumerateFiles(dir, "*.csproj").Any() ||
+                        Directory.EnumerateFiles(dir, "*.slnx").Any() ||
+                        Directory.EnumerateFiles(dir, "*.sln").Any() ||
                         File.Exists(Path.Combine(dir, "package.json")))
                     {
                         return dir;

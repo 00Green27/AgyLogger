@@ -17,6 +17,7 @@ public sealed class TranscriptWatcher : IDisposable
     private readonly bool _quiet;
     private readonly HashSet<string> _processedFiles = [];
     private readonly object _lock = new();
+    private readonly CancellationTokenSource _cts = new();
 
     public TranscriptWatcher(string? brainDir = null, string? outputDir = null, bool quiet = false)
     {
@@ -68,6 +69,8 @@ public sealed class TranscriptWatcher : IDisposable
 
     public void Stop()
     {
+        _cts.Cancel();
+
         if (_watcher is not null)
         {
             _watcher.EnableRaisingEvents = false;
@@ -113,7 +116,7 @@ public sealed class TranscriptWatcher : IDisposable
             }
 
             // Small delay to let agy finish writing without blocking the FileSystemWatcher thread pool
-            await Task.Delay(500).ConfigureAwait(false);
+            await Task.Delay(500, _cts.Token).ConfigureAwait(false);
 
             var session = TranscriptParser.Parse(e.FullPath);
             var exchanges = TranscriptParser.BuildExchanges(session);
@@ -137,6 +140,10 @@ public sealed class TranscriptWatcher : IDisposable
                 Console.WriteLine($"  [{DateTime.Now:HH:mm:ss}] Synced {shortId}... ({exchanges.Count} turns) -> {Path.GetFileName(outPath)}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Watcher stopped while processing; expected during shutdown
+        }
         catch (Exception ex)
         {
             if (!_quiet)
@@ -148,6 +155,8 @@ public sealed class TranscriptWatcher : IDisposable
 
     public void Dispose()
     {
+        _cts.Cancel();
         _watcher?.Dispose();
+        _cts.Dispose();
     }
 }

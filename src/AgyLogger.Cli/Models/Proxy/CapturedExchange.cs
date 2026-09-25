@@ -9,7 +9,7 @@ namespace AgyLogger.Cli.Models.Proxy;
 /// Represents a captured bidirectional HTTP exchange between an agent CLI and an upstream LLM API.
 /// Immutable and thread-safe data model for logging and Markdown rendering.
 /// </summary>
-public sealed record class CapturedExchange
+public sealed partial record class CapturedExchange
 {
     private readonly byte[] _rawRequestBody = [];
     private readonly byte[] _rawResponseBody = [];
@@ -247,13 +247,19 @@ public sealed record class CapturedExchange
         return RawResponseBody.Length > 0 ? Encoding.UTF8.GetString(RawResponseBody) : string.Empty;
     }
 
+    [GeneratedRegex(@"[^a-z0-9\-]")]
+    private static partial Regex IllegalCharsRegex();
+
+    [GeneratedRegex(@"-+")]
+    private static partial Regex ConsecutiveHyphensRegex();
+
     private static string SanitizeAgentName(string agent)
     {
         if (string.IsNullOrWhiteSpace(agent)) return "agent";
         // Convert to lowercase, replace spaces and underscores with hyphens, remove illegal filesystem characters
         var cleaned = agent.Trim().ToLowerInvariant().Replace(' ', '-').Replace('_', '-');
-        cleaned = Regex.Replace(cleaned, @"[^a-z0-9\-]", "");
-        cleaned = Regex.Replace(cleaned, @"-+", "-").Trim('-');
+        cleaned = IllegalCharsRegex().Replace(cleaned, "");
+        cleaned = ConsecutiveHyphensRegex().Replace(cleaned, "-").Trim('-');
         return string.IsNullOrEmpty(cleaned) ? "agent" : cleaned;
     }
 

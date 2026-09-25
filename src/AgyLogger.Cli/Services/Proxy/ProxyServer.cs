@@ -14,6 +14,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using AgyLogger.Cli.Models.Proxy;
@@ -22,7 +23,7 @@ using AgyLogger.Cli.Models.Proxy;
 /// High-performance HTTP/HTTPS proxy server supporting both plain HTTP reverse proxying
 /// and forward MitM HTTPS CONNECT tunneling with zero third-party dependencies.
 /// </summary>
-public sealed class ProxyServer : IAsyncDisposable
+public sealed partial class ProxyServer : IAsyncDisposable
 {
     private readonly ProxyOptions _options;
     private readonly CertificateAuthority _ca;
@@ -31,11 +32,26 @@ public sealed class ProxyServer : IAsyncDisposable
     private readonly ConcurrentDictionary<Task, bool> _activeConnections = new();
     private readonly ConcurrentDictionary<Socket, byte> _activeSockets = new();
 
+    // Bounded queue serializes log writes, caps memory during bursts, and makes shutdown deterministic.
+    private readonly Channel<CapturedExchange> _writeChannel = Channel.CreateBounded<CapturedExchange>(
+        new BoundedChannelOptions(256)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+        });
+    private Task _writerTask = Task.CompletedTask;
+
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoopTask;
     private bool _isRunning;
     private int _boundPort;
+
+    [GeneratedRegex(@"count[_-]?tokens", RegexOptions.IgnoreCase)]
+    private static partial Regex CountTokensRegex();
+
+    [GeneratedRegex(@"models/([^:/?]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ModelPathRegex();
 
     public ProxyOptions Options => _options;
     public CertificateAuthority CertificateAuthority => _ca;
@@ -83,6 +99,7 @@ public sealed class ProxyServer : IAsyncDisposable
         _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _isRunning = true;
 
+        _writerTask = Task.Run(DrainWriteChannelAsync);
         _acceptLoopTask = Task.Run(AcceptConnectionsLoopAsync, _cts.Token);
         return Task.CompletedTask;
     }
@@ -136,6 +153,12 @@ public sealed class ProxyServer : IAsyncDisposable
             }
             catch { }
         }
+
+        // Drain pending log writes before final cleanup
+        _writeChannel.Writer.TryComplete();
+        try { await _writerTask.ConfigureAwait(false); }
+        catch { }
+
         _activeSockets.Clear();
         _activeConnections.Clear();
     }
@@ -596,7 +619,7 @@ public sealed class ProxyServer : IAsyncDisposable
             return path.Contains("generateContent", StringComparison.OrdinalIgnoreCase);
         }
 
-        return !Regex.IsMatch(path, @"count[_-]?tokens", RegexOptions.IgnoreCase);
+        return !CountTokensRegex().IsMatch(path);
     }
 
     public static bool ShouldLogRequest(string method, string path, string renderer, bool filterHousekeeping = true)
@@ -734,21 +757,7 @@ public sealed class ProxyServer : IAsyncDisposable
             ModelName = model
         };
 
-        // Asynchronous non-blocking file write
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await RequestMarkdownRenderer.WriteToFileAsync(
-                    exchange,
-                    _options.LogsDirectory,
-                    _options.SaveRawCompanionFiles).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[AgyLogger] Failed to write markdown log: {ex.Message}");
-            }
-        });
+        _writeChannel.Writer.TryWrite(exchange);
     }
 
     private static string ExtractModelName(WireFormat format, string path, string reqBodyText)
@@ -764,7 +773,7 @@ public sealed class ProxyServer : IAsyncDisposable
             catch { }
         }
 
-        var match = Regex.Match(path, @"models\/([^:/?]+)", RegexOptions.IgnoreCase);
+        var match = ModelPathRegex().Match(path);
         if (match.Success)
         {
             return match.Groups[1].Value;
@@ -784,6 +793,24 @@ public sealed class ProxyServer : IAsyncDisposable
         }
 
         return "unknown";
+    }
+
+    private async Task DrainWriteChannelAsync()
+    {
+        await foreach (var exchange in _writeChannel.Reader.ReadAllAsync())
+        {
+            try
+            {
+                await RequestMarkdownRenderer.WriteToFileAsync(
+                    exchange,
+                    _options.LogsDirectory,
+                    _options.SaveRawCompanionFiles).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[AgyLogger] Failed to write markdown log: {ex.Message}");
+            }
+        }
     }
 
     #endregion

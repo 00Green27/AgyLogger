@@ -69,8 +69,7 @@ public static class WireFormatDetector
         }
 
         // 2. Path Fast Path for Anthropic and OpenAI
-        if (cleanPath.Contains("/v1/messages", StringComparison.OrdinalIgnoreCase) ||
-            cleanPath.Contains("/messages", StringComparison.OrdinalIgnoreCase))
+        if (cleanPath.Contains("/v1/messages", StringComparison.OrdinalIgnoreCase))
         {
             return WireFormat.Anthropic;
         }

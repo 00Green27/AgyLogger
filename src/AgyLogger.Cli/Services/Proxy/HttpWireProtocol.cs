@@ -74,12 +74,13 @@ public static class HttpWireProtocol
 
         if (isChunked)
         {
-            using var sourceStream = new PrefixedStream(result.RemainingBytes, stream);
+            using var sourceStream = new PrefixStream(result.RemainingBytes, stream, leaveInnerStreamOpen: true);
             var relayResult = await StreamRelay.RelayChunkedAsync(sourceStream, Stream.Null, dechunkForCapture: true, cancellationToken: cancellationToken).ConfigureAwait(false);
             body = relayResult.CapturedBytes;
         }
-        else if (headers.TryGetValue("Content-Length", out var clStr) && int.TryParse(clStr, out var cl) && cl > 0)
+        else if (headers.TryGetValue("Content-Length", out var clStr) && long.TryParse(clStr, out var clLong) && clLong > 0 && clLong <= int.MaxValue)
         {
+            var cl = (int)clLong;
             body = new byte[cl];
             var totalRead = 0;
 
@@ -240,10 +241,10 @@ public static class HttpWireProtocol
             sb.Append($"{k}: {v}\r\n");
         }
 
-        if (!request.Headers.ContainsKey("Content-Length") && 
-            (request.Body.Length > 0 || 
-             request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase) || 
-             request.Method.Equals("PUT", StringComparison.OrdinalIgnoreCase) || 
+        if (!request.Headers.ContainsKey("Content-Length") &&
+            (request.Body.Length > 0 ||
+             request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase) ||
+             request.Method.Equals("PUT", StringComparison.OrdinalIgnoreCase) ||
              request.Method.Equals("PATCH", StringComparison.OrdinalIgnoreCase)))
         {
             sb.Append($"Content-Length: {request.Body.Length}\r\n");
@@ -326,51 +327,3 @@ public static class HttpWireProtocol
 
     private sealed record HeaderReadResult(byte[] HeaderBytes, byte[] RemainingBytes);
 }
-    internal sealed class PrefixedStream : Stream
-    {
-        private readonly byte[] _prefix;
-        private readonly Stream _inner;
-        private int _pos;
-
-        public PrefixedStream(byte[] prefix, Stream inner)
-        {
-            _prefix = prefix;
-            _inner = inner;
-        }
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-        public override void Flush() { }
-        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer, offset, count, default).GetAwaiter().GetResult();
-        
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            if (_pos < _prefix.Length)
-            {
-                int copy = Math.Min(count, _prefix.Length - _pos);
-                Buffer.BlockCopy(_prefix, _pos, buffer, offset, copy);
-                _pos += copy;
-                return copy;
-            }
-            return await _inner.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
-        }
-
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            if (_pos < _prefix.Length)
-            {
-                int copy = Math.Min(buffer.Length, _prefix.Length - _pos);
-                _prefix.AsSpan(_pos, copy).CopyTo(buffer.Span);
-                _pos += copy;
-                return new ValueTask<int>(copy);
-            }
-            return _inner.ReadAsync(buffer, cancellationToken);
-        }
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-    }

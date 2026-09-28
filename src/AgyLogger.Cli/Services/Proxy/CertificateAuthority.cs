@@ -167,9 +167,31 @@ public sealed class CertificateAuthority : IDisposable
         var ca = CreateInMemory(DefaultCaCommonName, storeName, storeLocation);
         try
         {
-            Directory.CreateDirectory(dir);
+            if (OperatingSystem.IsWindows())
+            {
+                Directory.CreateDirectory(dir);
+            }
+            else
+            {
+                Directory.CreateDirectory(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
             var pfxBytes = ca.RootCertificate.Export(X509ContentType.Pfx);
-            File.WriteAllBytes(pfxPath, pfxBytes);
+
+            var options = new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write
+            };
+
+            if (!OperatingSystem.IsWindows())
+            {
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            using var stream = new FileStream(pfxPath, options);
+            stream.Write(pfxBytes);
+
             ca.ExportRootCertificatePem(crtPath);
         }
         catch

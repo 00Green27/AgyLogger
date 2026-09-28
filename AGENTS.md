@@ -1,294 +1,204 @@
 # Agent Instructions
 
-## Project Overview
+## Core Principles
 
-Agy Logger is a lightweight .NET CLI that reads Antigravity CLI (`agy`) transcript files (`transcript_full.jsonl`) and renders agent sessions as readable Markdown documents.
+Prefer the smallest correct change that fully solves the task.
 
-The project is intentionally small and dependency-free. Prefer simple, idiomatic .NET solutions over introducing abstractions, frameworks, or dependencies without a clear benefit.
+Preserve existing behavior unless the task explicitly requires a behavior change. Do not introduce abstractions, dependencies, configuration, or architectural layers for hypothetical future requirements.
 
-## Repository Structure
+Before editing, understand the affected execution flow, existing behavior, relevant tests, and callers/consumers of the code being changed.
 
-```text
-src/
-└── AgyLogger.Cli/
-    ├── Models/
-    ├── Services/
-    └── Program.cs
+Prefer existing code and standard .NET APIs over new abstractions or dependencies.
 
-tests/
-└── AgyLogger.Cli.Tests/
-```
+Make routine implementation decisions without asking for approval. Ask only when requirements are genuinely ambiguous or an action has effects outside the repository, such as publishing, destructive operations, real credentials, or external systems.
 
-`Models/` contains strongly typed representations of the relevant transcript data.
+Do not change unrelated code.
 
-`Services/` contains application logic:
+## Workflow
 
-* `TranscriptDiscovery` — discovers AGY conversations and transcript files.
-* `TranscriptReader` — incrementally reads and parses JSONL.
-* `MarkdownRenderer` — renders transcript entries as Markdown.
-* `TranscriptWatcher` — monitors active transcripts for changes.
+Before editing:
 
-`Program.cs` is the composition root and CLI entry point. Keep application logic out of it.
+1. Locate the relevant entry point, implementation, and tests.
+2. Trace the affected flow and inspect callers/consumers.
+3. Check existing tests for the behavior being changed.
+4. Check whether existing code or standard .NET APIs already solve the problem.
+5. Make the smallest change that satisfies the task.
 
-## Technology
+For bug fixes, inspect all callers of the changed code and check affected sibling paths. Fix the shared root cause rather than only the reported symptom.
 
-* .NET 10
-* Modern C#
-* Nullable reference types enabled
-* `System.Text.Json`
-* `IAsyncEnumerable<T>`
-* `FileSystemWatcher`
-* No third-party runtime dependencies
+After editing:
 
-Use built-in .NET APIs whenever they are sufficient.
+1. Run focused tests for the affected behavior.
+2. Run:
 
-## General Engineering Rules
+   ```text
+   dotnet format --verify-no-changes
+   dotnet build
+   dotnet test
+   ```
 
-Make only high-confidence changes. Prefer the smallest change that correctly solves the problem.
+3. Inspect `git diff` and `git status`.
+4. Review generated output when rendering behavior changed.
+5. Review security-sensitive paths when proxy/header/certificate handling changed.
+6. If something could not be verified, state what and why.
 
-Do not introduce abstractions, projects, packages, or configuration solely for theoretical future requirements.
+Do not ask for confirmation for routine implementation or verification steps. Ask before actions that affect external systems, real credentials, publishing, or destructive state.
 
-Do not change unrelated code while implementing a feature or fixing a bug.
+## Project Constraints
 
-Do not modify generated files unless the task explicitly requires it.
+The project targets .NET 10 and intentionally has a minimal dependency surface. `System.CommandLine` is the only runtime dependency.
 
-Do not suppress compiler warnings or analyzers to make the build pass. Fix the underlying issue.
+Do not add a third-party dependency unless the standard library and existing project code cannot reasonably provide the required functionality.
 
-Do not make parameters optional merely to avoid updating call sites. A parameter should be optional only when it has a meaningful semantic default.
+Do not introduce Clean Architecture, CQRS, MediatR, DI frameworks, or additional layers unless the requirements genuinely justify them.
 
-Preserve existing behavior unless the task explicitly requires a behavior change.
+`Program.cs` is the composition root and should remain thin. CLI construction belongs in `Cli/CommandLineBuilder.cs`.
 
-Before changing an existing implementation, understand its current behavior and verify that the change is actually necessary.
+## Transcript Processing
 
-## C# Style
+AGY writes `transcript_full.jsonl` while Agy Logger may read it concurrently.
 
-Follow the repository `.editorconfig` when present.
+Treat filesystem notifications as hints, not reliable write boundaries. Code must tolerate duplicate notifications, incomplete writes, temporary file-access failures, and partially written final records.
 
-Prefer:
+An incomplete final JSONL record may be retryable. A malformed completed record should normally be diagnosed and skipped so subsequent records can still be processed.
 
-* file-scoped namespaces;
-* nullable reference types;
-* `is null` / `is not null`;
-* pattern matching and switch expressions where they improve clarity;
-* `nameof` instead of member-name string literals;
-* `CancellationToken` for asynchronous and potentially long-running operations;
-* `IAsyncEnumerable<T>` for streaming transcript processing;
-* `await using` and `using` for deterministic resource ownership.
+Unknown JSON properties must not break parsing.
 
-Avoid unnecessary LINQ when a simple loop is clearer or avoids unnecessary allocations.
+Prefer incremental processing; do not load an entire transcript into memory when streaming is sufficient.
 
-Do not optimize prematurely. Optimize only when the behavior or data volume justifies it.
+Keep parsing separate from Markdown rendering.
 
-## Transcript Parsing
+AGY transcript files are read-only. Never modify the source transcript.
 
-The source format is JSON Lines: each non-empty line represents an independent JSON object.
-
-The transcript is written by AGY while the logger may be reading it. Code must therefore tolerate:
-
-* incomplete final lines;
-* partially written records;
-* duplicate filesystem change notifications;
-* transient file access failures;
-* unknown JSON properties;
-* malformed individual records.
-
-A malformed record should not normally prevent subsequent records from being processed.
-
-Do not load an entire transcript into memory when incremental processing is sufficient.
-
-Keep parsing concerns isolated from rendering concerns.
-
-When parsing loosely structured external data, comments should explain important format assumptions and edge cases rather than merely restating the code.
-
-For example:
-
-```csharp
-// AGY may append the record while we are reading the file, so the final
-// line can be incomplete. Treat an incomplete final record as retryable
-// instead of failing the whole transcript.
-```
-
-## AGY Paths
-
-AGY transcripts are located under:
-
-```text
-~/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript_full.jsonl
-```
-
-Resolve the user home directory using:
+Resolve the user home directory with:
 
 ```csharp
 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
 ```
 
-Do not hard-code platform-specific home-directory paths.
-
-Treat transcript files as read-only. Never modify the AGY source files.
-
 ## Watch Mode
 
-`FileSystemWatcher` notifications are hints that the file changed, not a reliable one-to-one representation of writes.
+`FileSystemWatcher` events are hints and may be duplicated or arrive before a file is completely written.
 
-The implementation must account for:
+Use debouncing/retry where necessary.
 
-* multiple events for one write;
-* events arriving before the file is completely written;
-* temporary sharing/locking failures;
-* partial final lines.
+`TranscriptWatcher` coordinates detection and processing but must not become a JSON parser or Markdown renderer.
 
-Use debouncing where appropriate.
+Long-running watch operations must support cancellation.
 
-`TranscriptWatcher` should detect changes and coordinate processing. It should not contain JSON parsing or Markdown rendering logic.
+## Markdown Output
 
-All long-running watch operations must support cancellation.
+Generated Markdown must be deterministic and preserve the meaningful agent timeline, including user input, model responses, tool calls, tool results, and errors.
 
-## Markdown Rendering
-
-The renderer should produce deterministic Markdown.
-
-Preserve the meaningful agent timeline, including user input, model responses, tool calls, tool results, errors, and other relevant transcript events.
-
-Escape or format content appropriately so transcript data cannot accidentally change the intended Markdown structure.
+Transcript content must be escaped or formatted so it cannot accidentally alter the Markdown structure.
 
 Do not expose raw JSON unless it is useful for understanding an event.
 
-Generated files are written to:
+Generated output goes under:
 
 ```text
 ./.agylogs/
 ```
 
-Output filenames must be safe on the current operating system.
+## Proxy and Security
+
+The proxy handles live HTTP/HTTPS traffic to LLM APIs. Treat intercepted traffic and transcripts derived from it as sensitive.
+
+Never log, print, or render credential-bearing headers or secrets. At minimum redact:
+
+- `Authorization`;
+- `x-api-key`;
+- cookies;
+- bearer/session tokens;
+- equivalent authentication material.
+
+Redaction must happen before sensitive data reaches logs, console output, generated Markdown, or test fixtures.
+
+Do not introduce a new unredacted persistence location for API keys, tokens, or session secrets.
+
+Assume intercepted request/response bodies may contain prompts, file contents, proprietary source code, or other sensitive user data.
+
+Do not add telemetry, analytics, or outbound network calls that transmit intercepted data.
+
+The MITM CA private key (`ca.pfx` under `~/.agylogs/ca/`) must be created with owner-only permissions on Unix. Never weaken them.
+
+If a change touches header handling, certificate generation, or the proxy request/response pipeline, mention this explicitly in the commit message or PR description.
+
+When uncertain whether intercepted data is sensitive, treat it as sensitive.
+
+## Architecture Invariants
+
+The project has two main subsystems: transcript processing and proxy interception.
+
+Keep them independent.
+
+`CompositeRunner` is the intended integration point when the `run` command needs both subsystems. Do not introduce additional cross-subsystem coupling unless the requirements genuinely require it.
+
+Keep application logic out of `Program.cs`.
+
+Keep parsing, rendering, filesystem watching, and proxy wire handling as separate responsibilities.
+
+Do not create abstractions merely to move code between files.
 
 ## Testing
 
-Tests should verify observable behavior rather than implementation details.
+Test observable behavior, not implementation details.
 
-Prioritize tests for:
+Prefer real `System.Text.Json`, filesystem behavior, and temporary directories over mocks when practical.
 
-* valid transcript records;
-* unknown properties;
-* malformed records;
-* empty lines;
-* incomplete final lines;
-* ordering preservation;
-* Markdown rendering;
-* Markdown escaping;
-* missing AGY directories;
-* missing transcript files;
-* concurrent file access;
-* duplicate watcher notifications;
-* cancellation.
+Prioritize tests around behavior that can fail because of concurrency, external input, or security boundaries:
 
-Use real `System.Text.Json` and filesystem behavior in tests where practical.
+- malformed and incomplete JSONL records;
+- unknown properties and empty lines;
+- ordering preservation;
+- Markdown escaping and rendering;
+- missing files/directories;
+- concurrent file access;
+- duplicate watcher notifications;
+- cancellation;
+- credential/header redaction.
 
-Avoid mocks when a small in-memory or temporary filesystem-based test is simpler and more representative.
+Do not add tests merely for coverage.
 
 Do not change the process-wide current directory in tests because tests may execute concurrently.
 
-## Generated Output Verification
+For generated Markdown, prefer golden/snapshot tests when the complete output is a meaningful contract. Review snapshot diffs before updating them.
 
-Markdown is a generated artifact and should have strong regression coverage.
+## Code Quality
 
-Prefer snapshot/golden-file testing for complete rendered Markdown rather than asserting a few individual substrings.
+Do not suppress compiler warnings or analyzers. Fix the underlying issue.
 
-When changing the Markdown format:
+Do not make parameters optional merely to avoid updating callers. Optional parameters require a meaningful semantic default.
 
-1. Run the relevant tests.
-2. Inspect the generated diff.
-3. Verify that every changed section is intentional.
-4. Update the expected snapshot only after reviewing the output.
+Avoid unnecessary LINQ when a simple loop is clearer or avoids allocations.
 
-A formatting change should not silently modify unrelated parts of the generated document.
+Do not optimize prematurely.
 
-## Build and Verification
+Avoid magic values when their meaning is not obvious at the call site.
 
-After making code changes, verify the result rather than assuming compilation succeeds.
+Keep hand-written source files reasonably focused. Split a file when it contains genuinely unrelated responsibilities, not merely because it is long.
 
-At minimum:
+Use `.editorconfig` as the source of truth for formatting and C# style. Do not duplicate its rules here.
 
-```text
-dotnet build
-dotnet test
-```
+## Git
 
-For focused changes, run the relevant test project first, then run the full test suite when practical.
+Keep commits scoped to one logical change.
 
-Before considering a change complete, verify:
+Write commit messages and PR descriptions in the imperative mood and explain what the change does and why.
 
-1. The solution builds without warnings introduced by the change.
-2. Relevant tests pass.
-3. The full test suite passes when practical.
-4. Generated Markdown output is reviewed when rendering behavior changed.
-5. `git diff` contains only intentional changes.
-6. No temporary files, debug output, credentials, or generated artifacts were accidentally added.
+Squash exploratory/fixup commits before finishing unless granular history is explicitly requested.
 
-Do not use `--no-build` for tests unless the current binaries are known to correspond exactly to the current source tree.
+## Definition of Done
 
-If verification cannot be performed, state precisely what was not verified and why.
+A task is complete when:
 
-## Change Discipline
+- the requested behavior is implemented;
+- relevant tests pass;
+- `dotnet format --verify-no-changes` passes;
+- `dotnet build` passes;
+- `dotnet test` passes;
+- the diff contains only intentional changes;
+- generated output was reviewed when applicable;
+- security-sensitive changes were reviewed when applicable.
 
-Keep changes scoped to the requested task.
-
-Before finishing, inspect:
-
-```text
-git status
-git diff
-```
-
-Do not revert or overwrite unrelated user changes.
-
-Do not reformat unrelated files.
-
-Do not add dependencies unless the standard library cannot reasonably provide the required functionality.
-
-When a dependency appears necessary, first verify whether the requirement can be satisfied with existing .NET APIs.
-
-## Comments
-
-Comments should explain **why**, not what the code obviously does.
-
-Good:
-
-```csharp
-// FileSystemWatcher can emit several events for a single append,
-// so processing is debounced to avoid rendering the same transcript
-// repeatedly.
-```
-
-Bad:
-
-```csharp
-// Create a timer.
-var timer = new Timer(...);
-```
-
-For compatibility assumptions or behavior inferred from AGY's external format, document the assumption and, when possible, link to the relevant upstream documentation or issue.
-
-Keep workaround comments next to the workaround and document the condition under which the workaround can be removed.
-
-## Architecture
-
-Keep the dependency flow simple:
-
-```text
-CLI
- │
- ├── TranscriptDiscovery
- │
- ├── TranscriptReader
- │       ↓
- │   TranscriptEntry
- │       ↓
- └── MarkdownRenderer
-
-TranscriptWatcher
- └── coordinates re-processing when the transcript changes
-```
-
-Do not introduce Clean Architecture, CQRS, MediatR, dependency-injection frameworks, or additional layers unless the project's requirements genuinely justify them.
-
-The primary design goal is a small, understandable CLI whose behavior can be verified easily.
+If something could not be verified, report it explicitly instead of presenting the task as fully verified.
